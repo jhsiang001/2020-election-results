@@ -1,0 +1,616 @@
+---
+title: "Final Project"
+author: "Esther Lee, Justin Hsiang"
+date: "12/1/2020"
+output: html_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(gbm)
+library(cluster)
+library(glmnet)
+library(grid)
+library(ggplot2)
+library(tidyverse)
+library(maps)
+library(dplyr)
+library(scales)
+library(ROCR)
+library(dendextend)
+library(ISLR)
+library(tree)
+library(randomForest)
+library(maptree)
+```
+
+```{r setup1, echo=FALSE, include= FALSE}
+## read data and convert candidate names and party names from string to factor
+election.raw <- read_csv("candidates_county.csv", col_names = TRUE) %>% 
+  mutate(candidate = as.factor(candidate), party = as.factor(party))
+
+## remove the word "County" from the county names
+words.to.remove = c("County")
+remove.words <- function(str, words.to.remove){
+  sapply(str, function(str){
+    x <- unlist(strsplit(str, " "))
+    x <- x[!x %in% words.to.remove]
+    return(paste(x, collapse = " "))
+  }, simplify = "array", USE.NAMES = FALSE)
+}
+election.raw$county <- remove.words(election.raw$county, words.to.remove)
+
+## read census data
+census <- read_csv("census_county.csv")
+```
+
+## Problem 1
+**Report the dimension of election.raw.**
+```{r 1a}
+dim(election.raw)
+election.raw
+```
+In election.raw dataset, there are 31167 rows and 5 columns. 
+
+**Are there missing values in the data set?**
+```{r 1b}
+sum(is.na(election.raw))
+```
+No, there are no missing values in the data set.
+
+**Compute the total number of distinct values in state in election.raw to verify that the data contains all states and a federal district.**
+```{r 1c}
+unique(election.raw['state'])
+nrow(unique(election.raw['state']))
+```
+There are 51 unique values in the 'state' column. This includes the 50 states in the United States of America, and includes the District of Columbia.
+
+
+
+
+## Problem 2
+**Report the dimension of census.**
+```{r 2a}
+dim(census)
+```
+In census data set, there are 3220 rows and 37 columns. 
+
+**Are there missing values in the data set?**
+```{r 2b}
+sum(is.na(census))
+```
+Yes, there is a missing value in the data set.
+
+**Compute the total number of distinct values in county in census with that in election.raw. Comment on your findings.**
+```{r 2c}
+##unique county data
+nrow(unique(census['County']))
+unique(census['County'])
+
+##unique election.raw data
+nrow(unique(election.raw['county']))
+unique(election.raw['county'])
+```
+There are 1995 unique counties in the census data set, while there are 2825 unique counties in the election.raw data set. ##COMMENT ON FINDINGS
+
+
+
+
+## Problem 3
+**Construct aggregated data sets from election.raw data.**
+```{r 3a}
+election.state= election.raw %>% group_by(state, candidate) %>% summarise_each(funs(mean), votes)
+election.state
+election.total= election.raw %>% summarise_each(funs(sum), votes)
+election.total
+```
+
+## Problem 4
+**How many named presidential candidates were there in the 2020 election?.**
+```{r 4a}
+unique(election.raw['candidate'])
+```
+There were 36 presidential candidates in the 2020 elections. 
+
+**Draw a bar chart of all votes received by each candidate.**
+```{r 4b}
+candid= election.raw %>% group_by(candidate) %>% summarise_each(funs(sum), votes)
+cand1=unlist(candid[1],use.names=FALSE)
+cand_num1= unlist(candid[2],use.names=FALSE)
+
+#plot showing how many people voted for Joe Biden and Donald Trump, relative to other candidates
+barplot(cand_num1, main='Total Votes per Candidate', xlab= 'candidates', ylab= 'total votes ', col='#69b3a2', names.arg=cand1)
+```
+This first chart shows the total sum of votes per candidate during the 2020 presidential election. Looking at this chart, it is apparent how popular Joe Biden and Donald Trump were compared to the other candidates.
+
+```{r 4b1}
+#bar charts comparing all candidates
+par(mfrow=c(1,3))
+barplot(log(cand_num1[c(1:4)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE, names.arg=cand1[c(1:4)], col='#69b3a2', xlim = c(0, 20))
+barplot(log(cand_num1[c(5:7)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE, names.arg=cand1[c(5:7)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(8:11)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE, names.arg=cand1[c(8:11)], col='#69b3a2',xlim = c(0, 20))
+par(mfrow=c(1,3))
+barplot(log(cand_num1[c(12:15)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE, names.arg=cand1[c(12:15)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(16:19)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(16:19)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(20:22)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(20:22)], col='#69b3a2',xlim = c(0, 20))
+par(mfrow=c(1,3))
+barplot(log(cand_num1[c(24:27)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(24:27)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(28:30)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(28:30)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(31:33)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(31:33)], col='#69b3a2',xlim = c(0, 20))
+par(mfrow=c(1,2))
+barplot(log(cand_num1[c(34,36)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(34,36)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(35, 37)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(35, 37)], col='#69b3a2',xlim = c(0, 20))
+barplot(log(cand_num1[c(23,38)]), xlab= 'candidates', ylab= 'total votes (log)', horiz=TRUE,names.arg=cand1[c(23, 38)], col='#69b3a2',xlim = c(0, 20))
+```
+These charts show the total number of votes per candidate, in comparison of the other candidates. To make reading the bar charts easier, all bar charts have been put on a log-scale.
+
+
+
+
+## Problem 5
+**Create data sets county.winner and state.winner by taking the candidates with the highest proportion of votes in both county level and state level.**
+```{r 5}
+subs= election.raw%>% group_by(state,county) %>% mutate(total = sum(votes),pct= votes/sum(votes))
+
+county.winner= subs %>% arrange(county, desc(pct))
+county.winner= top_n(county.winner, 1)
+county.winner
+
+state.winner= election.raw %>% group_by(state, candidate) %>% summarise_each(funs(sum), votes) %>% mutate(pct= votes/sum(votes))
+state.winner= top_n(state.winner,1)
+state.winner
+```
+
+
+
+
+## Problem 6
+**Draw county-level map by creating counties= map_data("county"). Color by county.**
+```{r 6}
+county <- map_data("county")
+
+ggplot(data = county) + 
+  geom_polygon(aes(x = long, y = lat, fill = subregion, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  guides(fill=FALSE)
+
+```
+
+
+
+## Problem 7
+**Now color the map by the winning candidate for each state.**
+```{r 7}
+#to make both state/ column names are the same
+colnames(state.winner)= c("region", "candidate", "votes", "pct")
+state.winner$region= tolower(state.winner$region)
+states <- map_data("state")
+#joining dataframes
+state_join= left_join(states, state.winner, by= 'region')
+
+#map code
+
+ggplot(data = states) + ggtitle("Presidential Election Results in the United States") +
+  geom_polygon(aes(x = long, y = lat, fill = state_join$candidate, group = group),
+               color = "white") + 
+  coord_fixed(1.3) + scale_color_identity(
+                          labels = c("Donald Trump", "Joe Biden"),
+                          guide = "legend") + theme(legend.title = element_blank())
+```
+
+
+## Problem 8
+**Color the map of the state of California by the winning candidate for each county. Note that some county have not finished counting the votes, and thus do not have a winner. Leave these counties uncolored.**
+```{r 8}
+
+cali= county %>% filter(region== 'california')
+
+cali.winner=county.winner %>% filter(state=="California")
+cali.winner$subregion= tolower(cali.winner$county)
+cali_join= left_join(cali, cali.winner, by='subregion')
+
+#map code
+ggplot(data = cali_join) + ggtitle("Presidential Election Results in California") +
+  geom_polygon(aes(x = long, y = lat, fill = candidate, group = group),
+               color = "white") + 
+  coord_fixed(1.3) 
+
+```
+
+
+
+## Problem 9
+**Create a visualization of your choice by using census data.**
+```{r 9}
+##california census (povery rates in different california counties)
+cali_cen= census %>% select(State, County, TotalPop, Income, Poverty, ChildPoverty) %>% group_by(State, County) %>% filter(State=='California')
+cali_cen= cali_cen[-c(1)]
+
+#organizing dataframe 'cen_demo'
+colnames(cali_cen)= c("subregion", "TotalPop", "Income", "Poverty", "ChildPoverty")
+cali_cen$subregion= tolower(cali_cen$subregion)
+cali_cen$subregion= gsub("\\s*\\w*$", "", cali_cen$subregion)
+
+#joining dataframes
+cen_join= left_join(cali, cali_cen, by='subregion')
+
+#mapping
+par(mfrow=c(2,1))
+
+ggplot(data = cali) + ggtitle("Presidential Election Results in California") +
+  geom_polygon(aes(x = long, y = lat, fill = cali_join$candidate, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +  scale_color_identity(
+                          labels = c("Donald Trump", "Joe Biden"),
+                          guide = "legend") + theme(legend.title = element_blank())
+
+ggplot(data = cali) + ggtitle("Poverty in California") +
+  geom_polygon(aes(x = long, y = lat, fill = cen_join$Poverty, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  guides("legend")
+
+```
+Using the census data set, I tried seeing if there was a correlation between the amount of poverty in certain counties in California to the county being predominantly Republican or Democratic. Overall, it generally seems as if the less poverty there is, the more chance there is of being Democratic. The higher the  poverty rate, the county seems to be more Republican. 
+
+## Problem 10
+```{r}
+census.clean = na.omit(census) %>%
+  mutate(Men =100*(Men/TotalPop), Employed = 100*(Employed/TotalPop), VotingAgeCitizen= 100*(VotingAgeCitizen/TotalPop))
+census.clean$Minority = census.clean$Hispanic+census.clean$Black+census.clean$Asian+census.clean$Pacific+census.clean$Native
+drops = c("IncomeErr", "IncomePerCap", "IncomePerCapErr", "Walk", "PublicWork", "Construction","Hispanic","Black","Asian","Native","Pacific", "Women","ChildPoverty","Mino")
+census.clean = census.clean[ , !(names(census.clean) %in% drops)]
+head(census.clean,n=5)
+```
+
+  I also decided to drop the variable Women as it can be easily predicted with our values of men and total population, thus making it useless in prediction. As for the remaining features, I decided to take the correlation of poverty and child poverty as the observations seem to follow very similar patterns in terms of slope. With a correlation of value .9328, I decided to get rid of it. Intuitively, this would make perfect sense as with most children being dependent on their parents' wealth or lack thereof it would make sense that they are highly correlated variables and almost perfectly colinear excluding some special cases. In addition, I took a look at the variables Minority and White and saw that these are also almost perfectly negatively correlated at a value of -.9973. With this, I decided to get rid of the Minority variable a well. I also decided to look at the correlation coefficeint between poverty and income as I thought there would be a strong negative correlation there. However, with a correlation value of -.7646 I did not feel like there was strong enough of a case to drop this variable. 
+## Problem 11
+```{r}
+pr.out = prcomp(census.clean[,-c(1:3)], scale = TRUE, center = TRUE)
+pc.county = data.frame(pr.out$rotation[,1:2])
+arrange(pc.county,PC1)[,1:2]
+
+```
+
+  Here, I decided to get rid of CountyId in addition to State and county because while CountyId represents numeric variables, they are predetermined labels for each county. We chose to center the features because this is required prior to taking the PCA. I also chose to scale the features as not all variables are on the same scale; therefore it is necessary. The features with the highest absolute loading values are Poverty, Employed and Unemployment from highest to lowest. 
+
+  Looking at PC1 loading values, we see the features Poverty, Unemployment, Service, Drive, Production, MeanCommute, Office, Carpool, VotingAgeCitizen with negative loading values. On the otherhand, we see the features Employed, Income, Professional, WorkAtHome, White, SelfEmployed, FamilyWork, Transit, TotalPop, Men, PrivateWork and OtherTransp with positive loading values. This would imply some sort of negative correlation between these features. Looking at some of these values, this would make sense as Employed and Unemployment would obviously be negatively correlated as well as Income and Poverty. 
+
+## Problem 12
+```{r}
+pr.var = pr.out$sdev^2
+plot(pr.var, xlab = "Principal Component",ylab= "Variance of Principle Component", ylim = c(0,200))
+pve = pr.var/sum(pr.var)
+plot(cumsum(pve), xlab="Principal Component ",
+ylab=" Cumulative Proportion of Variance Explained ", ylim=c(0,1), type='b')
+abline( h= .9, col = "red")
+
+```
+
+The number of principal components needed to capture 90% of the variance is 12.
+
+## Problem 13
+```{r}
+set.seed(1)
+census.dist = dist(census.clean[,-c(1:3)])
+census.hclust = hclust(census.dist)
+clus = cutree(census.hclust,10)
+## dendrogram: branches colored by 10 groups
+dend1 = as.dendrogram(census.hclust)
+# color branches and labels by 3 clusters
+dend1 = color_branches(dend1, k=10)
+dend1 = color_labels(dend1, k=10)
+# change label size
+dend1 = set(dend1, "labels_cex", .5)
+dend1 = set_labels(dend1, labels=census.clean$County[order.dendrogram(dend1)])
+plot(dend1, horiz = T, main = "Dendrogram of Counties Based on Features(10 Clusters)")
+plot(dend1[[2]][[2]][[2]][[2]][[2]][[2]][[2]][[1]][[1]], main = "Santa Barbara County Cluster Based on Features",horiz = T)
+
+pc.score = data.frame(pr.out$x[,1:2])
+pc.dist = dist(pc.score)
+pc.hclust = hclust(pc.dist)
+clus2 = cutree(pc.hclust, 10)
+## dendrogram: branches colored by 10 groups
+dend2 = as.dendrogram(pc.hclust)
+# color branches and labels by 10 clusters
+dend2 = color_branches(dend2, k = 10)
+dend2 = color_labels(dend2, k = 10)
+# change label size
+dend2 = set(dend2, "labels_cex", .4)
+dend2 = set_labels(dend2, labels=census.clean$County[order.dendrogram(dend2)])
+plot(dend2, horiz = T)
+
+
+
+```
+
+  After searching through the first dendrogram, I have identified Santa Barbary County to be in the pink cluster by looking through all the endpoints. This being the largest cluster, it does not tell us much about Santa Barbara county besides that it has a small distance to many counties based on each feature. In the dendrogram created through PC1 and PC2 score values, there is a more even split in clusters meaning that contrary to the first dendrogram, Santa Barbara is in a more specific cluster. 
+### Classification
+```{r}
+# we move all state and county names into lower-case
+tmpwinner <- county.winner %>% ungroup %>%
+  mutate_at(vars(state, county), tolower)
+
+# we move all state and county names into lower-case
+# we further remove suffixes of "county" and "parish"
+tmpcensus <- census.clean %>% mutate_at(vars(State, County), tolower) %>%
+  mutate(County = gsub(" county|  parish", "", County)) 
+
+# we join the two datasets
+election.cl <- tmpwinner %>%
+  left_join(tmpcensus, by = c("state"="State", "county"="County")) %>% 
+  na.omit
+# drop levels of county winners if you haven't done so in previous parts
+election.cl$candidate <- droplevels(election.cl$candidate)
+
+## save meta information
+election.meta <- election.cl %>% select(c(county, party, CountyId, state, votes, pct, total))
+
+## save predictors and class labels
+election.cl = election.cl %>% select(-c(county, party, CountyId, state, votes, pct, total))
+```
+
+## Problem 14
+
+We excluded party as a predictor variable as it not a numeric vector.
+
+```{r}
+
+set.seed(12) 
+n <- nrow(election.cl)
+idx.tr <- sample.int(n, 0.8*n) 
+election.tr <- election.cl[idx.tr, ]
+election.te <- election.cl[-idx.tr, ]
+```
+
+```{r}
+set.seed(20) 
+nfold <- 10
+folds <- sample(cut(1:nrow(election.tr), breaks=nfold, labels=FALSE))
+```
+
+
+```{r}
+calc_error_rate = function(predicted.value, true.value){
+  return(mean(true.value!=predicted.value))
+}
+records = matrix(NA, nrow=5, ncol=2)
+colnames(records) = c("train.error","test.error")
+rownames(records) = c("tree","logistic","lasso","rf","boosted")
+
+```
+
+
+## Problem 15
+```{r}
+
+set.seed(123)
+election.tree = tree(candidate ~.,data=election.tr)
+draw.tree(election.tree, nodeinfo = TRUE, cex = .5)
+cv= cv.tree(election.tree, FUN=prune.misclass, rand = folds)
+best_size=  min(cv$size[cv$dev==min(cv$dev)])
+pt.cv= prune.misclass(election.tree, best= best_size)
+draw.tree(pt.cv, nodeinfo=TRUE, cex=0.5)
+
+pred.pt.cv.te= predict(election.tree, election.te, type="class")
+pred.pt.cv.tr = predict(pt.cv, election.tr, type = "class")
+records[1,2]=calc_error_rate(pred.pt.cv.te, election.te$candidate)
+records[1,1]=calc_error_rate(pred.pt.cv.tr, election.tr$candidate)
+records
+
+```
+
+
+The pruned tree has a slightly lower classified rate as it uses less variables in its deecision making. From the pruned tree, we can see that in terms of percentage of people in county is less than 1.15% who transit, Donald Trump has 83.6% of the votes. Moving down from here we notice that for those counties that have over 48.95% of the total population being white, there is a 91.7% chance that they voted for Trump here. We can also see that for those that have an Unemployment rate of higher than 6.75%, Joe Biden takes around 55.6% of these votes. On the right side of our decision tree, we can see that of the 379 counties that voted for Biden that have a Transit percentage of over 1.15, around 60.9% of these counties also voted for Biden if the Total Population was greater than 131021. Of the remaiining, 39.1% of counties that voted for Trump with a Total Population of less than 131021, those that have less than 18.95% of county population working in service have a 83.3% chance of voting for Trump. Moving further down from service, we see that of the 84 counties that voted for Trump, around 83.3% of those with less than a 45.15% working in professional field, 83.3% of those people votedd for Trump. Going down for Total Population again, we see that of those Counties, if teh White Population was greater than 80.5%, there was around a 16.5% chance of them voting for Donald Trump with the remainder voting for Joe Biden.
+```{r}
+election.tr
+sum(election.tr$Transit<1.15 & election.tr$White <48.95 & election.tr$Unemployment> 6.75 )
+
+```
+
+## Problem 16
+```{r}
+glm_fit= glm(candidate ~ .,
+             data= election.tr, family= "binomial")
+summary(glm_fit)
+exp(coef(glm_fit))
+pred.log.te= predict(glm_fit, newdata = election.te, type="response")
+pred.log.labeled.te = ifelse(pred.log.te < .5, "Donald Trump","Joe Biden")
+pred.log.tr = predict(glm_fit, election.tr, type = "response")
+pred.log.labeled.tr = ifelse(pred.log.tr < .5, "Donald Trump","Joe Biden")
+records[2,2]=calc_error_rate(pred.log.labeled.te, election.te$candidate)
+records[2,1]=calc_error_rate(pred.log.labeled.tr, election.tr$candidate)
+
+```
+
+  The significant variables in this model are TotalPop, White, VotingAgeCitizen, Poverty, Professional, Service, Office, Production, Drive, Carpool, Employed, MeanCommute, Employed, PrivateWork and Unemployment. There are many more significant variables here, than in our pruned decision tree. 
+  In analyzing the coefficient for the White variable, I will take exponentiating the coefficient getting a value of .88036. I will interpret this as a decrease of around 12% in votes for Biden as White increases by a percent. For those that are unemployed, there seems to be around a 25% increase for each percentage increase in unemployment. 
+## Problem 17
+```{r}
+set.seed(5)
+lambda.lasso = seq(1, 50) * 1e-4
+
+x.train = as.matrix(election.tr[,-1])
+
+y.train = election.tr$candidate
+x.test = as.matrix(election.te[,-1])
+lasso.mod <- cv.glmnet(x.train, y.train, alpha=1,lambda = seq(1, 50) * 1e-4,family = "binomial")
+plot(lasso.mod)
+abline(v = log(lasso.mod$lambda.min), col="red", lwd=3, lty=2)
+bestlam =lasso.mod$lambda.min
+lasso.coef=predict(lasso.mod,type="coefficients",s=bestlam)[2:22,]
+bestlam
+lasso.coef
+lasso.pred.train = predict(lasso.mod, s = bestlam, newx = x.train,type = "response")
+lasso.pred.train.labeled = ifelse(lasso.pred.train < .5, "Donald Trump","Joe Biden")
+lasso.pred.test = predict(lasso.mod, s = bestlam, newx = x.test,type = "response")
+lasso.pred.test.labeled = ifelse(lasso.pred.test < .5, "Donald Trump","Joe Biden")
+records[3,2]=calc_error_rate(lasso.pred.test.labeled, election.te$candidate)
+records[3,1]=calc_error_rate(lasso.pred.train.labeled,election.tr$candidate)
+
+```
+
+The best lambda value in this case is .0011. In comparison to a logistic model, the lasso model has a slightly lower training error and a much lower test error. The non-zero coefficient values for this best lambda value are Total Population, White, Voting Age Citizen, Poverty, Professional, Service, Office, Production, Drive, Carpool, Other Transp, WorkAtHome, MeanCommute, Employed, PrivateWork, SelfEmployed, FamilyWork and Unemployment
+
+## Problem 18
+```{r}
+election_cand = ifelse(election.te$candidate == "Donald Trump",0,1)
+pred.pt.cv.te.prob = predict(pt.cv, election.te)
+tree.pred = prediction(pred.pt.cv.te.prob[,2], election_cand)
+perf.tree = performance(tree.pred, measure = "tpr", x.measure = "fpr")
+log.pred = prediction(pred.log.te, election_cand)
+perf.log =performance(log.pred, measure = "tpr", x.measure = "fpr")
+lasso.pred = prediction(lasso.pred.test, election_cand)
+perf.lasso =performance(lasso.pred, measure = "tpr", x.measure = "fpr")
+plot(perf.tree, col = 2, lwd =2,main = "ROC Curves")
+abline(0,1)
+par(new=TRUE)
+plot(perf.log, col = 3, lwd = 2)
+par(new = TRUE)
+plot(perf.lasso, col = 4, lwd = 2)
+legend("bottomright",legend = c("Pruned Decision Tree","Logistic Model","Lasso Model"), col = c(2:4),lty =1)
+
+```
+
+## Problem 19
+
+
+
+```{r}
+#RF model 
+set.seed(5)
+rf.election.train = randomForest(candidate~.-candidate, data = election.tr,importance = TRUE,ntree = 40)
+rf.pred.te= predict(rf.election.train, newdata = election.te,type = "prob")
+rf.pred.tr = predict(rf.election.train, newdata = election.tr,type = "prob")
+election.rf.labeled.te = ifelse(rf.pred.te[,1]>.5, "Donald Trump","Joe Biden")
+election.rf.labeled.tr = as.factor(ifelse(rf.pred.tr[,1]>.5, "Donald Trump","Joe Biden"))
+records[4,2]=calc_error_rate(election.rf.labeled.te, election.te$candidate)
+records[4,1]=calc_error_rate(election.rf.labeled.tr,election.tr$candidate)
+rf.pred = prediction(rf.pred.te[,2], election.te$candidate)
+perf.rf = performance(rf.pred, measure = "tpr", x.measure = "fpr")
+
+```
+
+## Problem 20
+
+```{r}
+#boosted model
+set.seed(4)
+election.boost.training = gbm(ifelse(candidate=="Donald Trump", 0, 1)~. ,data = election.tr, n.trees = 1000, shrinkage = .1, distribution = "bernoulli")
+summary(election.boost.training)
+election.boost.tr = predict(election.boost.training, newdata = election.tr, type = "response")
+election.boost.te = predict(election.boost.training, newdata = election.te, type = "response")
+election.boost.tr.labeled = ifelse(election.boost.tr < .5, "Donald Trump", "Joe Biden")
+election.boost.te.labeled = ifelse(election.boost.te < .5, "Donald Trump", "Joe Biden")
+records[5,1]=calc_error_rate(election.boost.tr.labeled,election.tr$candidate)
+records[5,2]=calc_error_rate(election.boost.te.labeled,election.te$candidate)
+boost.pred = prediction(election.boost.te, election.te$candidate)
+perf.boost = performance(boost.pred, measure = "tpr", x.measure = "fpr")
+```
+
+```{r}
+#All ROC Curves, AUC values and Records
+plot(perf.tree, col = 2, lwd =2,main = "ROC Curves")
+abline(0,1)
+par(new=TRUE)
+plot(perf.log, col = 3, lwd = 2)
+par(new = TRUE)
+plot(perf.lasso, col = 4, lwd = 2)
+par(new = TRUE)
+plot(perf.rf, col = 5, lwd = 2)
+par(new = TRUE)
+plot(perf.boost, col = 6, lwd = 2)
+legend("bottomright",legend = c("Pruned Decision Tree","Logistic Model","Lasso Model","RF Model","Boosted Model"), col = c(2:6),lty =1, cex = .5)
+
+auc.tree = performance(tree.pred, "auc")@y.values
+auc.log = performance(log.pred, "auc")@y.values
+auc.lasso = performance(lasso.pred, "auc")@y.values
+auc.rf = performance(rf.pred, "auc")@y.values
+auc.boost = performance(boost.pred, "auc")@y.values
+cbind(c("Pruned Decision Tree","Logistic Model","Lasso Model","RF Model","Boosted Model"), c(auc.tree,auc.log,auc.lasso,auc.rf,auc.boost))
+records
+```
+Looking at the AUC values for these curves, we see that the Lasso model has the highest AUC value. While rf and boosted models seem to give us a lower test error, this could be due to overfitting in our model. The random forest and boosted models have lower test errors than the decision tree, logistic and lasso models. So in terms of accuracy they seem better. However, in terms of proportion of true positives and negatives, the lasso model seems to do the best. 
+
+```{r 20}
+#calculate swing counties
+swing=county.winner %>% filter(pct <= 0.525 & pct >= 0.475)
+swing
+swing$subregion= tolower(swing$county)
+
+county_join= left_join(swing, county, by= 'subregion')
+
+ggplot(data = county_join) + 
+  geom_polygon(aes(x = long, y = lat, fill = subregion, group = group),
+               color = "white") + 
+  coord_fixed(1.3) +
+  guides(fill=FALSE)
+```
+
+```{r 20a, echo=FALSE, include=FALSE}
+#number of "swing" counties
+nrow(swing)
+
+#total counties
+nrow(unique(election.raw['county']))
+
+#percent of swing counties
+(nrow(swing)/nrow(unique(election.raw['county'])))*100
+
+#sum of favored candidate
+sum(swing$candidate=="Joe Biden")
+sum(swing$candidate=="Donald Trump")
+```
+
+```{r 20b}
+hi=table(swing$candidate)
+barplot(hi)
+```
+```{r 20b2, echo=FALSE, include=FALSE}
+#theoretical swing b/w 45% and 55%
+swing1=county.winner %>% filter(pct <= 0.55 & pct >= 0.45)
+
+#swing counties 
+nrow(swing1)
+
+#counties favoring joe biden 
+sum(swing1$candidate=="Joe Biden")
+
+#counties favoring donald trump
+sum(swing1$candidate=="Donald Trump")
+nrow(swing1)/nrow(unique(election.raw['county']))
+```
+
+This election was very equally polarized, which made it difficult to predict the future president. We determined if a county was a "swing" county if the difference between the votes for Biden and Trump was 5% or less. 
+
+Using this information, there were 496 "swing" counties, with no particular inclination towards a candidate. 238 counties had a 5% or less inclination towards Donald Trump, while 258 counties were slightly learning towards Joe Biden. Out of the 2825 unique counties, 17.56% of the counties were considered "swing" counties in our calculations. If we chose the "swing" counties as the majority vote being between 45% and 55%, the swing counties would have consisted of 30%.
+
+Looking at the map of the swing counties, the swing counties are evenly spread out across the country. Because of this, the decision of who the electoral votes goes to is not certain, because it is not just one state that is unsure of their preferred candidate.
+
+Ultimately, because of how spread out and how many swing counties there are in the data, it is difficult to predict which presidential candidate the counties preferred.
+
+On top of this, due to COVID-19 there were allowed mail-in ballots that were taken in until November 3, 2020. The time it takes for the mail-in ballots to arrive at poll stations could have been up to 1 week, so there is even more uncertainty added onto this data.
+
+
+
+## Problem 21
+
+Based on our multiple models that we included in our analysis, we saw that the AUC value for the lasso model seemed to be the highest of all the models we chose. Interpreting this Lasso Model, the significant variables that we saw had an effect on the voting outcome were those such as Total Population, White, Voting Age Citizen, Poverty, Professional, Service, Office, Production, Drive, Carpool, Other Transp, WorkAtHome, MeanCommute, Employed, PrivateWork, SelfEmployed       FamilyWork and Unemployment. All the other variables that had coefficients of 0 could have caused overfitting in the model. To visualize the errors on the map, I will be adding the predicted test election results for the lasso model to the samples test election dataset.
+
+```{r}
+
+records[3,2]
+
+```
+
+We saw the error of this to be .07119 which is a solid test error value with a lower training error value that makes sense. I feel like the significant variables chosen in this model make a lot of sense such as Professional, Poverty and Unemployment as these were variables that we heard of take a large role in our recent election. However, these insights are not enough as there were clearly more variables taken into account that had significance on our test data set for the lasso model. This would imply a lack of undersstanding and a need to expand our domain knowledge as I was not able to completely understand why the data was influenced by these variables completely. 
+
+
+
+
+
+
+
+
